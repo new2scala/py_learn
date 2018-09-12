@@ -34,8 +34,13 @@ lst1 = ['a', 'b']
 show_items(*lst1)
 lst2 = ['a', 5]
 show_items(*lst2)
-lst3 = ['a', 5, False]
-show_items(*lst3)
+# lst3 = ['a', 5, False]
+# show_items(*lst3)
+
+t = zip ([1, 2, 3], ['a', 'b'])
+
+for x in t:
+    print(x)
 
 
 if __name__ == '__main__':
