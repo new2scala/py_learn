@@ -47,7 +47,7 @@ class Vocab():
             .replace(Vocab.TOKEN_CL, Vocab.TOKEN_CL_REPL)\
             .replace(Vocab.TOKEN_BR, Vocab.TOKEN_BR_REPL)
         parts = Vocab.REGEX_BRACKETS.split(data_line)
-        res = []
+        res = [Vocab.START_TOKEN]
         for part in parts:
             if part.startswith('['):
                 res.append(part)

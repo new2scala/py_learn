@@ -13,7 +13,7 @@ class TrainDataset(Dataset):
     def __getitem__(self, item):
         d = self._data[item]
         encoded = self.voc.enc(d)
-        return torch.tensor(encoded)
+        return encoded #torch.tensor(encoded)
 
     def __len__(self):
         return len(self._data)
@@ -23,10 +23,10 @@ class TrainDataset(Dataset):
 
     @classmethod
     def normalize_batch(cls, batch):
-        max_len = max([seq.size[0] for seq in batch])
-        res = torch.zeros(len(batch), max_len)
+        max_len = max([len(seq) for seq in batch])
+        res = torch.zeros(len(batch), max_len).long()
         for i, seq in enumerate(batch):
-            res[i, :seq.size[0]] = seq
+            res[i, :len(seq)] = torch.tensor(seq)
         return res
 
 

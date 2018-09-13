@@ -2,6 +2,7 @@
 from torch_learn.rnn2.train_data_set import TrainDataset
 from torch_learn.rnn2.vocab import Vocab
 import unittest
+from torch.utils.data import DataLoader
 
 class TrainDatasetTest(unittest.TestCase):
 
@@ -12,10 +13,16 @@ class TrainDatasetTest(unittest.TestCase):
         td = TrainDatasetTest.TRAIN_DATA
 
         self.assertEqual(len(td), 23)
-
-        for d in td:
-            print(d)
-
+        dl = DataLoader(
+            td,
+            batch_size=5,
+            shuffle=False,
+            drop_last=True,
+            collate_fn=TrainDataset.normalize_batch
+        )
+        for i, batch in enumerate(dl):
+            print(i)
+            print(batch.size())
 
 if __name__ == '__main__':
     unittest.main()
