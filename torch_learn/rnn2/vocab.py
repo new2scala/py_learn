@@ -24,7 +24,7 @@ class Vocab():
             self._chars = self._chars + chars
             self._vocab_size = len(self._chars)
             self._vocab = dict(zip(self._chars, range(len(self._chars))))
-            self._rev_vocab = { v : k for v, k in self._vocab.items() }
+            self._rev_vocab = { v : k for k, v in self._vocab.items() }
 
     def __len__(self):
         return self._vocab_size
@@ -34,6 +34,12 @@ class Vocab():
 
     def lookup(self, char):
         return self._vocab[char]
+
+    def start_encoded(self):
+        return self.lookup(Vocab.START_TOKEN)
+
+    def end_encoded(self):
+        return self.lookup(Vocab.END_TOKEN)
 
     REGEX_BRACKETS = re.compile('(\[[^\[\]]{1,6}\])')
     TOKEN_CL = 'Cl'
@@ -61,3 +67,14 @@ class Vocab():
         tokens = self.tokenize(data_line)
         return [self.lookup(t) for t in tokens]
 
+    def dec(self, seq):
+        tokens_b4_end = []
+        for s in seq:
+            if s == self.end_encoded():
+                break
+            tokens_b4_end.append(self._rev_vocab[s])
+        res = ''.join(tokens_b4_end)
+        smi = res\
+            .replace(Vocab.TOKEN_CL_REPL, Vocab.TOKEN_CL)\
+            .replace(Vocab.TOKEN_BR_REPL, Vocab.TOKEN_BR)
+        return smi

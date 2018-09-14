@@ -3,6 +3,9 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+import torch.nn.functional as F
+from torch_learn.rnn2.vocab import Vocab
+
 def trace_size(name, value):
     print('{} size: {}'.format(name, value.size()))
 
@@ -47,25 +50,30 @@ class LstmNet(nn.Module):
         ]
         return new_params, output
 
-    def forward(self, input):
-        # initialize hidden
-        trace_size('input', input)
-        input_size0 = input.size(0)
-        layer_params = [ ]
+    def _init_hidden(self, batch_size):
+        layer_params = []
         for i in range(3):
-            h = torch.zeros(input_size0, self.hidden_size, dtype=torch.float32)
-            c = torch.zeros(input_size0, self.hidden_size, dtype=torch.float32)
+            h = torch.zeros(batch_size, self.hidden_size, dtype=torch.float32)
+            c = torch.zeros(batch_size, self.hidden_size, dtype=torch.float32)
             # trace_size('h_%d'%i, h)
             # trace_size('c_%d'%i, c)
             if torch.cuda.is_available():
                 h = h.cuda()
                 c = c.cuda()
-            layer_params.append([h,c])
+            layer_params.append([h, c])
+        return layer_params
+
+    def forward(self, input):
+        # initialize hidden
+        #trace_size('input', input)
+        batch_size = input.size(0)
+        layer_params = self._init_hidden(batch_size)
 
         input_size1 = input.size(1)
         outputs = []
 
-        for _, input_t in enumerate(input.chunk(input_size1, dim=1)):
+        inputs = input.chunk(input_size1, dim=1)
+        for _, input_t in enumerate(inputs):
             reshaped = input_t.view(-1)
             # trace_size('reshaped', reshaped)
             if torch.cuda.is_available():
@@ -74,15 +82,46 @@ class LstmNet(nn.Module):
             # trace_size('output', output)
             # trace_size('layer_params[0][0]', layer_params[0][0])
             # trace_size('layer_params[0][1]', layer_params[0][1])
+            output = F.log_softmax(output, 1)
             outputs.append(output)
 
         # print('outputs before stack {}'.format(len(outputs)))
         # print('\toutputs[0]: {}'.format(outputs[0].size()))
-        outputs = torch.stack(outputs, 1)
+        outputs = torch.stack(outputs, 2)
         # trace_size('outputs after stack', outputs)
         outputs = outputs.squeeze(2)
         # trace_size('outputs after squeeze', outputs)
         return outputs
+
+    def sample(self, batch_size, max_len=140):
+        start_token = Variable(torch.zeros(batch_size).long())
+        start_token[:] = self.vocab.start_encoded()
+        x = start_token
+
+        layer_params = self._init_hidden(batch_size)
+        res = [ ]
+        finished = torch.zeros(batch_size).byte()
+        if torch.cuda.is_available():
+            finished = finished.cuda()
+        for step in range(max_len):
+            if torch.cuda.is_available():
+                x = x.cuda()
+            layer_params, output = self._step(x, layer_params)
+            prob = F.softmax(output, 1)
+            x = torch.multinomial(prob, 1).view(-1)
+            res.append(x.view(-1, 1))
+
+            x = Variable(x.data)
+            END_samples = (x == self.vocab.start_encoded()).data
+            if torch.cuda.is_available():
+                END_samples = END_samples.cuda()
+            finished = torch.ge(finished + END_samples, 1)
+            if torch.prod(finished) == 1:
+                break
+        res = torch.cat(res, 1)
+        return res.data
+
+
 
     # def forward(self, input, hidden_curr):
     #     x = self._embedding(input)

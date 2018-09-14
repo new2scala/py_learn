@@ -6,8 +6,22 @@ from torch.utils.data import DataLoader
 
 from torch_learn.rnn2.train_data_set import TrainDataset
 import torch.optim as optim
+import torch.nn as nn
+import torch
+from tqdm import tqdm
 
-import tqdm
+from rdkit import Chem
+
+def dec_learning_rate(step, opt, dec_rate=0.01):
+    """Multiplies the learning rate of the optimizer by 1 - decrease_by"""
+    prev_lrs = [ ]
+    curr_lrs = [ ]
+    for param_group in opt.param_groups:
+        prev_lrs.append(param_group['lr'])
+        param_group['lr'] *= (1 - dec_rate)
+        curr_lrs.append(param_group['lr'])
+    print('Step {}: learning rate decreased from {} to {}'.format(step, prev_lrs, curr_lrs))
+
 
 def train_pass1():
 
@@ -24,15 +38,59 @@ def train_pass1():
     data = DataLoader(
         train_data,
         batch_size=64,
-        shuffle=True
+        shuffle=True,
+        collate_fn=TrainDataset.normalize_batch
     )
 
-    opt = optim.Adam(lstm.parameters(), lr=1e-3)
+    criterion = nn.NLLLoss()
+    params = lstm.parameters()
+    print(params)
+    opt = optim.RMSprop(lstm.parameters(), lr=1e-3)
 
     for epoch in range(5):
-        print('step: %d'%epoch)
+        print('epoch: %d'%epoch)
 
-        for step, batch in tqdm(enumerate(data), total=len(data)):
-            batch_long = batch.long()
-            print('batch size: {}'.format(batch_long.size()))
-            batch_size, seq_len = batch_long.size()
+        data_len = len(data)
+        for step, batch in tqdm(enumerate(data), total=data_len):
+            #
+            # batch_long = batch.long()
+            # print('batch size: {}'.format(batch_long.size()))
+            dim1_size = batch.size(1)
+            batch_input = batch.narrow(1, 0, dim1_size-1)
+            batch_target = batch.narrow(1, 1, dim1_size-1)
+            if torch.cuda.is_available():
+                batch_target = batch_target.cuda()
+
+            def clos():
+                opt.zero_grad()
+                out = lstm(batch_input)
+                # targets_ext = torch.zeros(out.size())
+                # targets_reshaped = targets.view(-1, targets.size(1), 1)
+                # targets_ext.scatter_(2, targets_reshaped, 1.0)
+                # targets_ext = targets
+                loss = criterion(out, batch_target)
+                loss.backward()
+                if step % 100 == 0:
+                    print('step {} loss: {}'.format(step, loss.item()))
+
+                if step % 200 == 0:
+                    dec_learning_rate(step, opt)
+                #
+                # if step % 200 == 199:
+                    samples = lstm.sample(128)
+                    valid = 0
+                    for _, s in enumerate(samples.cpu().numpy()):
+                        smi = voc.dec(s)
+                        if Chem.MolFromSmiles(smi):
+                            valid += 1
+                    tqdm.write("\n{} valid!".format(valid))
+
+                #return loss
+
+            opt.step(clos)
+
+            # if step % 50 == 0:
+            #     print('-------------- {} loss: {}'.format(step, loss.item()))
+
+if __name__ == '__main__':
+    train_pass1()
