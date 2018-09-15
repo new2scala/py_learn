@@ -25,7 +25,7 @@ class LstmNet(nn.Module):
     def __init__(self,
                  vocab, input_size, hidden_size,
                  #cell_type='LSTM'):
-                 layer_num=2):
+                 layer_num=3):
         super(LstmNet, self).__init__()
 
         self.vocab = vocab
@@ -139,7 +139,7 @@ class LstmNet(nn.Module):
         #     output = F.log_softmax(output, 1)
         #     outputs.append(output)
         output, _h, _c = self._step(inputs, input_lens, _h, _c)
-        output = F.log_softmax(output, 2)
+        #output = F.log_softmax(output, 2)
         #outputs.append(output)
 
         # # print('outputs before stack {}'.format(len(outputs)))
