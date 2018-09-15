@@ -23,6 +23,20 @@ def dec_learning_rate(step, opt, dec_rate=0.01):
     print('Step {}: learning rate decreased from {} to {}'.format(step, prev_lrs, curr_lrs))
 
 
+def check_samples(samples, vocab):
+    valid = 0
+    valid_samples = [ ]
+    for _, s in enumerate(samples.cpu().numpy()):
+        smi = vocab.dec(s)
+        if Chem.MolFromSmiles(smi):
+            valid += 1
+            valid_samples.append(smi)
+    trace = "\n%d valid!"%(valid)
+    for vs in valid_samples:
+        trace += '\n\t%s'%vs
+    tqdm.write(trace)
+
+
 def train_pass1():
 
     voc = Vocab('rnn2/tests/vocab.txt')
@@ -37,7 +51,7 @@ def train_pass1():
 
     data = DataLoader(
         train_data,
-        batch_size=64,
+        batch_size=128,
         shuffle=True,
         collate_fn=TrainDataset.normalize_batch
     )
@@ -45,7 +59,7 @@ def train_pass1():
     criterion = nn.NLLLoss()
     params = lstm.parameters()
     print(params)
-    opt = optim.RMSprop(lstm.parameters(), lr=1e-3)
+    opt = optim.RMSprop(lstm.parameters(), lr=5e-3)
 
     for epoch in range(5):
         print('epoch: %d'%epoch)
@@ -70,7 +84,7 @@ def train_pass1():
                 # targets_ext = targets
                 loss = criterion(out, batch_target)
                 loss.backward()
-                if step % 100 == 0:
+                if step % 50 == 0:
                     print('step {} loss: {}'.format(step, loss.item()))
 
                 if step % 200 == 0:
@@ -78,12 +92,7 @@ def train_pass1():
                 #
                 # if step % 200 == 199:
                     samples = lstm.sample(128)
-                    valid = 0
-                    for _, s in enumerate(samples.cpu().numpy()):
-                        smi = voc.dec(s)
-                        if Chem.MolFromSmiles(smi):
-                            valid += 1
-                    tqdm.write("\n{} valid!".format(valid))
+                    check_samples(samples, voc)
 
                 #return loss
 

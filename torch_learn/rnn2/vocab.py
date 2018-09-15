@@ -2,8 +2,8 @@
 import re
 
 class Vocab():
-    START_TOKEN = 'START'
-    END_TOKEN = 'END'
+    START_TOKEN = '[T]'
+    END_TOKEN = '[D]'
     SPECIAL_TOKENS = [ START_TOKEN, END_TOKEN ]
     def __init__(self, from_file, max_len=140):
         self._init_from_file(from_file)
