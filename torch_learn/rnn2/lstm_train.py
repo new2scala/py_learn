@@ -35,9 +35,11 @@ def check_samples(samples, vocab):
             valid += 1
             valid_samples.append(smi)
 
-    trace = "\n%d (%.2f%%) valid!"%(valid, valid*100.0/len(samples))
+    valid_samples.sort()
+    trace = ''
     for vs in valid_samples:
         trace += '\n\t%s'%vs
+    trace += "\n%d (%.2f%%) valid!"%(valid, valid*100.0/len(samples))
     tqdm.write(trace)
 
 def batch_lens(vocab, batch):
@@ -67,7 +69,7 @@ def perpare_pack_padding(input, input_lens):
         mask[i][input_lens[i]:] = 0
         input[i] = tp[1]
     # res = pack_padded_sequence(input_emb, input_lens, batch_first=True)
-    return input, input_lens, mask
+    return input, input_lens, mask.byte()
 
 
 def train_pass1():
@@ -76,24 +78,24 @@ def train_pass1():
 
     lstm = LstmNet(
         vocab=voc,
-        input_size=64,
-        hidden_size=256
+        input_size=128,
+        hidden_size=128
     )
 
     train_data = TrainDataset('rnn2/tests/train_data', voc)
 
     data = DataLoader(
         train_data,
-        batch_size=64,
+        batch_size=128,
         shuffle=True,
         drop_last=True,
         collate_fn=TrainDataset.normalize_batch
     )
 
-    criterion = nn.NLLLoss(reduction='none')
+    criterion = nn.CrossEntropyLoss(reduction='none')
     params = lstm.parameters()
     print(params)
-    opt = optim.RMSprop(lstm.parameters(), lr=5e-3)
+    opt = optim.Adam(lstm.parameters(), lr=1e-3)
 
     for epoch in range(5):
         print('epoch: %d'%epoch)
@@ -124,7 +126,8 @@ def train_pass1():
                 out = out.transpose(1,2)
 
                 loss = criterion(out, batch_target)
-                loss = loss * batch_mask
+                loss = loss.masked_select(batch_mask)
+                #loss = loss * batch_mask
                 # todo: mask out padding
                 loss = loss.mean()
                 loss.backward()
