@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from rdkit import Chem
 
-def dec_learning_rate(step, opt, dec_rate=0.01):
+def dec_learning_rate(step, opt, dec_rate=0.02):
     """Multiplies the learning rate of the optimizer by 1 - decrease_by"""
     prev_lrs = [ ]
     curr_lrs = [ ]
@@ -49,16 +49,21 @@ def batch_lens(vocab, batch):
             print("error")
     return X_len
 
+import numpy as np
+
 def perpare_pack_padding(input, input_lens):
     #print(input_emb.size())
     zipped = [(input_lens[i], input[i]) for i in range(len(input_lens))]
     zipped.sort(key = lambda tp: -tp[0])
+    sz = input.size()
+    mask = torch.ones(sz[0], sz[1]-1) # target sequence length = input length -1
     #print(zipped)
     for i, tp in enumerate(zipped):
         input_lens[i] = tp[0]
+        mask[i][input_lens[i]:] = 0
         input[i] = tp[1]
     # res = pack_padded_sequence(input_emb, input_lens, batch_first=True)
-    return input, input_lens
+    return input, input_lens, mask
 
 
 def train_pass1():
@@ -83,7 +88,7 @@ def train_pass1():
     criterion = nn.NLLLoss(reduction='none')
     params = lstm.parameters()
     print(params)
-    opt = optim.RMSprop(lstm.parameters(), lr=1e-2)
+    opt = optim.RMSprop(lstm.parameters(), lr=5e-3)
 
     for epoch in range(5):
         print('epoch: %d'%epoch)
@@ -95,7 +100,9 @@ def train_pass1():
             # print('batch size: {}'.format(batch_long.size()))
             dim1_size = batch.size(1)
             batch_input_lens = batch_lens(voc, batch)
-            perpare_pack_padding(batch, batch_input_lens)
+            batch, batch_input_lens, batch_mask = perpare_pack_padding(batch, batch_input_lens)
+            if torch.cuda.is_available():
+                batch_mask = batch_mask.cuda()
             batch_input = batch.narrow(1, 0, dim1_size-1)
             batch_target = batch.narrow(1, 1, dim1_size-1)
             if torch.cuda.is_available():
@@ -110,7 +117,9 @@ def train_pass1():
                 # targets_ext.scatter_(2, targets_reshaped, 1.0)
                 # targets_ext = targets
                 out = out.transpose(1,2)
+
                 loss = criterion(out, batch_target)
+                loss = loss * batch_mask
                 # todo: mask out padding
                 loss = loss.mean()
                 loss.backward()
