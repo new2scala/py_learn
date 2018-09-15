@@ -24,9 +24,11 @@ class TrainDataset(Dataset):
     @classmethod
     def normalize_batch(cls, batch):
         max_len = max([len(seq) for seq in batch])
+        #max_len += 1 # END token
         res = torch.zeros(len(batch), max_len).long()
         for i, seq in enumerate(batch):
             res[i, :len(seq)] = torch.tensor(seq)
+            #res[i, len(seq)] = self.voc.end_encoded()
         return res
 
 

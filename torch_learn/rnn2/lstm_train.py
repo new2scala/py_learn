@@ -36,6 +36,19 @@ def check_samples(samples, vocab):
         trace += '\n\t%s'%vs
     tqdm.write(trace)
 
+def batch_lens(vocab, batch):
+    X_len = []
+    for seq in batch:
+        found = False
+        for i, c in enumerate(seq):
+            if c == vocab.end_encoded():
+                X_len.append(i + 1)
+                found = True
+                break
+        if not found:
+            print("error")
+    return X_len
+
 
 def train_pass1():
 
@@ -70,6 +83,7 @@ def train_pass1():
             # batch_long = batch.long()
             # print('batch size: {}'.format(batch_long.size()))
             dim1_size = batch.size(1)
+            batch_input_lens = batch_lens(voc, batch)
             batch_input = batch.narrow(1, 0, dim1_size-1)
             batch_target = batch.narrow(1, 1, dim1_size-1)
             if torch.cuda.is_available():
@@ -77,7 +91,7 @@ def train_pass1():
 
             def clos():
                 opt.zero_grad()
-                out = lstm(batch_input)
+                out = lstm(batch_input, batch_input_lens)
                 # targets_ext = torch.zeros(out.size())
                 # targets_reshaped = targets.view(-1, targets.size(1), 1)
                 # targets_ext.scatter_(2, targets_reshaped, 1.0)

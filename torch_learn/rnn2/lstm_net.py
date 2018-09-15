@@ -36,6 +36,7 @@ class LstmNet(nn.Module):
 
     def _step(self, input, layer_params):
         input = self._embedding(input)
+
         h0_t, c0_t = layer_params[0]
         h0_t, c0_t = self._lstm1(input, (h0_t, c0_t))
         h1_t, c1_t = layer_params[1]
@@ -63,7 +64,7 @@ class LstmNet(nn.Module):
             layer_params.append([h, c])
         return layer_params
 
-    def forward(self, input):
+    def forward(self, input, input_lens):
         # initialize hidden
         #trace_size('input', input)
         batch_size = input.size(0)
@@ -71,6 +72,13 @@ class LstmNet(nn.Module):
 
         input_size1 = input.size(1)
         outputs = []
+        if torch.cuda.is_available():
+            input = input.cuda()
+        input_emb = self._embedding(input)
+
+        # input_padded = torch.nn.utils.rnn.pack_padded_sequence(
+        #     input_emb, input_lens, batch_first=True)
+        # print(input_padded.size())
 
         inputs = input.chunk(input_size1, dim=1)
         for _, input_t in enumerate(inputs):

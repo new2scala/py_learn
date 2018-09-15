@@ -19,7 +19,7 @@ class LstmNetTest(unittest.TestCase):
             LstmNetTest.TRAIN_DATA,
             batch_size=5,
             shuffle=False,
-            collate_fn=TrainDataset.normalize_batch
+            collate_fn=LstmNetTest.VOCAB.normalize_batch
         )
 
         for i, batch in enumerate(data):

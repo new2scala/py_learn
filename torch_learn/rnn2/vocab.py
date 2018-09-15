@@ -22,6 +22,7 @@ class Vocab():
         with open(file, 'r') as f:
             chars = f.read().split()
             self._chars = self._chars + chars
+            self._chars.sort()
             self._vocab_size = len(self._chars)
             self._vocab = dict(zip(self._chars, range(len(self._chars))))
             self._rev_vocab = { v : k for k, v in self._vocab.items() }
