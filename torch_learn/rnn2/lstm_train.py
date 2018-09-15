@@ -42,7 +42,7 @@ def batch_lens(vocab, batch):
         found = False
         for i, c in enumerate(seq):
             if c == vocab.end_encoded():
-                X_len.append(i + 1)
+                X_len.append(i + 1 - 1) # -1: batch is complete, but input is batch[:-1]
                 found = True
                 break
         if not found:
@@ -72,7 +72,7 @@ def train_pass1():
     criterion = nn.NLLLoss()
     params = lstm.parameters()
     print(params)
-    opt = optim.RMSprop(lstm.parameters(), lr=5e-3)
+    opt = optim.RMSprop(lstm.parameters(), lr=1e-2)
 
     for epoch in range(5):
         print('epoch: %d'%epoch)
@@ -83,11 +83,12 @@ def train_pass1():
             # batch_long = batch.long()
             # print('batch size: {}'.format(batch_long.size()))
             dim1_size = batch.size(1)
-            batch_input_lens = batch_lens(voc, batch)
             batch_input = batch.narrow(1, 0, dim1_size-1)
+            batch_input_lens = batch_lens(voc, batch)
             batch_target = batch.narrow(1, 1, dim1_size-1)
             if torch.cuda.is_available():
                 batch_target = batch_target.cuda()
+            #batch_target = batch_target.transpose(0,1).transpose(1,2)
 
             def clos():
                 opt.zero_grad()
@@ -96,6 +97,7 @@ def train_pass1():
                 # targets_reshaped = targets.view(-1, targets.size(1), 1)
                 # targets_ext.scatter_(2, targets_reshaped, 1.0)
                 # targets_ext = targets
+                out = out.transpose(1,2)
                 loss = criterion(out, batch_target)
                 loss.backward()
                 if step % 50 == 0:
@@ -107,8 +109,6 @@ def train_pass1():
                 # if step % 200 == 199:
                     samples = lstm.sample(128)
                     check_samples(samples, voc)
-
-                #return loss
 
             opt.step(clos)
 
