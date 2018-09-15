@@ -12,7 +12,10 @@ from tqdm import tqdm
 
 from rdkit import Chem
 
-def dec_learning_rate(step, opt, dec_rate=0.02):
+from rdkit import rdBase
+rdBase.DisableLog('rdApp.error')
+
+def dec_learning_rate(step, opt, dec_rate=0.05):
     """Multiplies the learning rate of the optimizer by 1 - decrease_by"""
     prev_lrs = [ ]
     curr_lrs = [ ]
@@ -31,7 +34,8 @@ def check_samples(samples, vocab):
         if Chem.MolFromSmiles(smi):
             valid += 1
             valid_samples.append(smi)
-    trace = "\n%d valid!"%(valid)
+
+    trace = "\n%d (%.2f%%) valid!"%(valid, valid*100.0/len(samples))
     for vs in valid_samples:
         trace += '\n\t%s'%vs
     tqdm.write(trace)
@@ -72,16 +76,17 @@ def train_pass1():
 
     lstm = LstmNet(
         vocab=voc,
-        input_size=128,
-        hidden_size=512
+        input_size=64,
+        hidden_size=256
     )
 
     train_data = TrainDataset('rnn2/tests/train_data', voc)
 
     data = DataLoader(
         train_data,
-        batch_size=128,
+        batch_size=64,
         shuffle=True,
+        drop_last=True,
         collate_fn=TrainDataset.normalize_batch
     )
 
@@ -130,7 +135,7 @@ def train_pass1():
                     dec_learning_rate(step, opt)
                 #
                 # if step % 200 == 199:
-                    samples = lstm.sample(128)
+                    samples = lstm.sample(200)
                     check_samples(samples, voc)
 
             opt.step(clos)

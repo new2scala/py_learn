@@ -25,7 +25,7 @@ class LstmNet(nn.Module):
     def __init__(self,
                  vocab, input_size, hidden_size,
                  #cell_type='LSTM'):
-                 layer_num=3):
+                 layer_num=2):
         super(LstmNet, self).__init__()
 
         self.vocab = vocab
