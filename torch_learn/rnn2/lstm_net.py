@@ -10,16 +10,16 @@ def trace_size(name, value):
     print('{} size: {}'.format(name, value.size()))
 
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-def pack_padding(input_emb, input_lens):
-    #print(input_emb.size())
-    zipped = [(input_lens[i], input_emb[i]) for i in range(len(input_lens))]
-    zipped.sort(key = lambda tp: -tp[0])
-    #print(zipped)
-    for i, tp in enumerate(zipped):
-        input_lens[i] = tp[0]
-        input_emb[i] = tp[1]
-    res = pack_padded_sequence(input_emb, input_lens, batch_first=True)
-    return res
+# def pack_padding(input_emb, input_lens):
+#     #print(input_emb.size())
+#     zipped = [(input_lens[i], input_emb[i]) for i in range(len(input_lens))]
+#     zipped.sort(key = lambda tp: -tp[0])
+#     #print(zipped)
+#     for i, tp in enumerate(zipped):
+#         input_lens[i] = tp[0]
+#         input_emb[i] = tp[1]
+#     res = pack_padded_sequence(input_emb, input_lens, batch_first=True)
+#     return res
 
 class LstmNet(nn.Module):
     def __init__(self,
@@ -56,7 +56,8 @@ class LstmNet(nn.Module):
 
     def _step(self, input, input_lens, h, c):
         input_emb = self._embedding(input)
-        packed = pack_padding(input_emb, input_lens)
+        #packed = pack_padding(input_emb, input_lens)
+        packed = pack_padded_sequence(input_emb, input_lens, batch_first=True)
 
         packed_out, (ht, ct) = self.lstm(packed, (h, c))
         # h0_t, c0_t = layer_params[0]
@@ -82,7 +83,8 @@ class LstmNet(nn.Module):
         batch_len = sz[1]
         batch_lens = [batch_len for _ in range(batch_size)]
         input_emb = self._embedding(input)
-        packed = pack_padding(input_emb, batch_lens)
+        #packed = pack_padding(input_emb, batch_lens)
+        packed = pack_padded_sequence(input_emb, batch_lens, batch_first=True)
 
         packed_out, (ht, ct) = self.lstm(packed, (h, c))
         output, _ = pad_packed_sequence(packed_out, batch_first=True)
