@@ -15,6 +15,7 @@ from rdkit import Chem
 from rdkit import rdBase
 rdBase.DisableLog('rdApp.error')
 
+
 def dec_learning_rate(step, opt, dec_rate=0.05):
     """Multiplies the learning rate of the optimizer by 1 - decrease_by"""
     prev_lrs = [ ]
@@ -83,7 +84,7 @@ def train_pass1():
     gru = GruNet(
         vocab=voc,
         input_size=128,
-        hidden_size=512
+        hidden_size=256
     )
 
     train_data = TrainDataset('rnn2/tests/train_data', voc)
@@ -131,7 +132,7 @@ def train_pass1():
                 out = out.transpose(1,2)
 
                 loss = criterion(out, batch_target)
-                loss = loss * batch_mask.float()
+                #loss = loss * batch_mask.float()
                 #loss = loss.sum(1)
                 loss = loss.masked_select(batch_mask)
                 # todo: mask out padding
