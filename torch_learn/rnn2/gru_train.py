@@ -1,5 +1,5 @@
 
-from torch_learn.rnn2.lstm_net import LstmNet
+from torch_learn.rnn2.gru_net import GruNet
 from torch_learn.rnn2.vocab import Vocab
 
 from torch.utils.data import DataLoader
@@ -44,7 +44,7 @@ def check_samples(samples, vocab):
 
 def batch_lens(vocab, batch):
     X_len = []
-    for seq in batch:
+    for seq in batch.transpose(0, 1):
         found = False
         for i, c in enumerate(seq):
             if c == vocab.end_encoded():
@@ -59,15 +59,19 @@ import numpy as np
 
 def perpare_pack_padding(input, input_lens):
     #print(input_emb.size())
-    zipped = [(input_lens[i], input[i]) for i in range(len(input_lens))]
-    zipped.sort(key = lambda tp: -tp[0])
     sz = input.size()
-    mask = torch.ones(sz[0], sz[1]-1) # target sequence length = input length -1
+    #res_input = torch.ones(sz[0]-1, sz[1])
+    zipped = [(input_lens[i], input[:,i]) for i in range(len(input_lens))]
+    zipped.sort(key = lambda tp: -tp[0])
+    mask = torch.ones(sz[0]-1, sz[1]) # target sequence length = input length -1
+    #print(mask.size())
     #print(zipped)
     for i, tp in enumerate(zipped):
         input_lens[i] = tp[0]
-        mask[i][input_lens[i]:] = 0
-        input[i] = tp[1]
+        if input_lens[i] < mask.size()[0]-1:
+            #print('%d:%d,%d'%(i,input_lens[i],mask.size()[0]))
+            mask[input_lens[i]:,i] = 0
+        input[:,i] = tp[1]
     # res = pack_padded_sequence(input_emb, input_lens, batch_first=True)
     return input, input_lens, mask.byte()
 
@@ -76,10 +80,10 @@ def train_pass1():
 
     voc = Vocab('rnn2/tests/vocab.txt')
 
-    lstm = LstmNet(
+    gru = GruNet(
         vocab=voc,
         input_size=128,
-        hidden_size=256
+        hidden_size=512
     )
 
     train_data = TrainDataset('rnn2/tests/train_data', voc)
@@ -89,13 +93,13 @@ def train_pass1():
         batch_size=128,
         shuffle=True,
         drop_last=True,
-        collate_fn=TrainDataset.normalize_batch
+        collate_fn=TrainDataset.normalize_batch2
     )
 
     criterion = nn.CrossEntropyLoss(reduction='none')
-    params = lstm.parameters()
+    params = gru.parameters()
     print(params)
-    opt = optim.RMSprop(lstm.parameters(), lr=2e-3, weight_decay=1e-2)
+    opt = optim.Adam(gru.parameters(), lr=1e-3)
 
     for epoch in range(5):
         print('epoch: %d'%epoch)
@@ -106,19 +110,20 @@ def train_pass1():
             # batch_long = batch.long()
             # print('batch size: {}'.format(batch_long.size()))
             dim1_size = batch.size(1)
+            dim0_size = batch.size(0)
             batch_input_lens = batch_lens(voc, batch)
             batch, batch_input_lens, batch_mask = perpare_pack_padding(batch, batch_input_lens)
             if torch.cuda.is_available():
                 batch_mask = batch_mask.cuda()
-            batch_input = batch.narrow(1, 0, dim1_size-1)
-            batch_target = batch.narrow(1, 1, dim1_size-1)
+            batch_input = batch.narrow(0, 0, dim0_size-1)
+            batch_target = batch.narrow(0, 1, dim0_size-1)
             if torch.cuda.is_available():
                 batch_target = batch_target.cuda()
             #batch_target = batch_target.transpose(0,1).transpose(1,2)
 
             def clos():
                 opt.zero_grad()
-                out = lstm(batch_input, batch_input_lens)
+                out = gru(batch_input, batch_input_lens)
                 # targets_ext = torch.zeros(out.size())
                 # targets_reshaped = targets.view(-1, targets.size(1), 1)
                 # targets_ext.scatter_(2, targets_reshaped, 1.0)
@@ -127,9 +132,10 @@ def train_pass1():
 
                 loss = criterion(out, batch_target)
                 loss = loss * batch_mask.float()
+                #loss = loss.sum(1)
                 loss = loss.masked_select(batch_mask)
                 # todo: mask out padding
-                loss = loss.sum()
+                loss = loss.mean()
                 loss.backward()
                 if step % 50 == 0:
                     print('step {} loss: {}'.format(step, loss.item()))
@@ -138,7 +144,7 @@ def train_pass1():
                     dec_learning_rate(step, opt)
                 #
                 # if step % 200 == 199:
-                    samples = lstm.sample(200)
+                    samples = gru.sample(200)
                     check_samples(samples, voc)
 
             opt.step(clos)
