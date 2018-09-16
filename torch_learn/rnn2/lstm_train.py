@@ -78,7 +78,7 @@ def train_pass1():
 
     lstm = LstmNet(
         vocab=voc,
-        input_size=64,
+        input_size=128,
         hidden_size=256
     )
 
@@ -86,7 +86,7 @@ def train_pass1():
 
     data = DataLoader(
         train_data,
-        batch_size=64,
+        batch_size=128,
         shuffle=True,
         drop_last=True,
         collate_fn=TrainDataset.normalize_batch
@@ -95,7 +95,7 @@ def train_pass1():
     criterion = nn.CrossEntropyLoss(reduction='none')
     params = lstm.parameters()
     print(params)
-    opt = optim.Adam(lstm.parameters(), lr=1e-3)
+    opt = optim.RMSprop(lstm.parameters(), lr=2e-3)
 
     for epoch in range(5):
         print('epoch: %d'%epoch)
@@ -126,8 +126,8 @@ def train_pass1():
                 out = out.transpose(1,2)
 
                 loss = criterion(out, batch_target)
+                loss = loss * batch_mask.float()
                 loss = loss.masked_select(batch_mask)
-                #loss = loss * batch_mask
                 # todo: mask out padding
                 loss = loss.sum()
                 loss.backward()
