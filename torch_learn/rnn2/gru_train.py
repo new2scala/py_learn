@@ -16,7 +16,7 @@ from rdkit import rdBase
 rdBase.DisableLog('rdApp.error')
 
 
-def dec_learning_rate(step, opt, dec_rate=0.05):
+def dec_learning_rate(step, opt, dec_rate=0.02):
     """Multiplies the learning rate of the optimizer by 1 - decrease_by"""
     prev_lrs = [ ]
     curr_lrs = [ ]
@@ -84,7 +84,7 @@ def train_pass1():
     gru = GruNet(
         vocab=voc,
         input_size=128,
-        hidden_size=256
+        hidden_size=512
     )
 
     train_data = TrainDataset('rnn2/tests/train_data', voc)
@@ -100,10 +100,10 @@ def train_pass1():
     criterion = nn.CrossEntropyLoss(reduction='none')
     params = gru.parameters()
     print(params)
-    opt = optim.Adam(gru.parameters(), lr=1e-3)
+    opt = optim.RMSprop(gru.parameters(), lr=5e-4)
 
     for epoch in range(5):
-        print('epoch: %d'%epoch)
+        #print('epoch: %d'%epoch)
 
         data_len = len(data)
         for step, batch in tqdm(enumerate(data), total=data_len):
@@ -132,21 +132,19 @@ def train_pass1():
                 out = out.transpose(1,2)
 
                 loss = criterion(out, batch_target)
-                #loss = loss * batch_mask.float()
+                loss = loss * batch_mask.float()
                 #loss = loss.sum(1)
-                loss = loss.masked_select(batch_mask)
+                #loss = loss.masked_select(batch_mask)
                 # todo: mask out padding
                 loss = loss.mean()
                 loss.backward()
                 if step % 50 == 0:
-                    print('step {} loss: {}'.format(step, loss.item()))
+                    print('Epoch {} step {} loss: {}'.format(epoch, step, loss.item()))
 
-                if step % 200 == 0:
-                    dec_learning_rate(step, opt)
-                #
-                # if step % 200 == 199:
+                if step % 500 == 0:
                     samples = gru.sample(200)
                     check_samples(samples, voc)
+                    dec_learning_rate(step, opt)
 
             opt.step(clos)
 

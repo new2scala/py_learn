@@ -51,11 +51,11 @@ class GruNet(nn.Module):
 
     def _step(self, input, input_lens, h):
         input_emb = self._embedding(input)
-        #packed = pack_padded_sequence(input_emb, input_lens, batch_first=True)
-        #packed_out, ht = self.gru(packed, h)
-        #output, _ = pad_packed_sequence(packed_out, batch_first=True)
+        packed = pack_padded_sequence(input_emb, input_lens, batch_first=False)
+        packed_out, ht = self.gru(packed, h)
+        output, _ = pad_packed_sequence(packed_out, batch_first=False)
 
-        output, ht = self.gru(input_emb, h)
+        #output, ht = self.gru(input_emb, h)
 
         output = self._linear(output)
         return output, ht
@@ -67,10 +67,12 @@ class GruNet(nn.Module):
         batch_size = sz[0]
         batch_len = sz[1]
         batch_lens = [batch_len for _ in range(batch_size)]
+        #batch_lens = torch.ones(batch_size, 1)
         input_emb = self._embedding(input)
-        # packed = pack_padded_sequence(input_emb, batch_lens, batch_first=True)
+
+        # packed = pack_padded_sequence(input_emb, batch_lens, batch_first=False)
         # packed_out, ht = self.gru(packed, h)
-        # output, _ = pad_packed_sequence(packed_out, batch_first=True)
+        # output, _ = pad_packed_sequence(packed_out, batch_first=False)
         output, ht = self.gru(input_emb, h)
         output = self._linear(output)
         return output, ht
