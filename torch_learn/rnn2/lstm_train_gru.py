@@ -1,5 +1,5 @@
 
-from torch_learn.rnn2.gru_net import GruNet
+from torch_learn.rnn2.lstm_net_gru import LstmNetG
 from torch_learn.rnn2.vocab import Vocab
 
 from torch.utils.data import DataLoader
@@ -81,7 +81,7 @@ def train_pass1():
 
     voc = Vocab('rnn2/tests/vocab.txt')
 
-    gru = GruNet(
+    lstm = LstmNetG(
         vocab=voc,
         input_size=128,
         hidden_size=512
@@ -98,9 +98,9 @@ def train_pass1():
     )
 
     criterion = nn.CrossEntropyLoss(reduction='none')
-    params = gru.parameters()
+    params = lstm.parameters()
     print(params)
-    opt = optim.Adam(gru.parameters(), lr=1e-3)
+    opt = optim.Adam(lstm.parameters(), lr=1e-3)
 
     for epoch in range(6):
         #print('epoch: %d'%epoch)
@@ -124,7 +124,7 @@ def train_pass1():
 
             def clos():
                 opt.zero_grad()
-                out = gru(batch_input, batch_input_lens)
+                out = lstm(batch_input, batch_input_lens)
                 # targets_ext = torch.zeros(out.size())
                 # targets_reshaped = targets.view(-1, targets.size(1), 1)
                 # targets_ext.scatter_(2, targets_reshaped, 1.0)
@@ -134,7 +134,7 @@ def train_pass1():
                 loss = criterion(out, batch_target)
                 loss = loss * batch_mask.float()
                 #loss = loss.sum(1)
-                loss = loss.masked_select(batch_mask)
+                #loss = loss.masked_select(batch_mask)
                 # todo: mask out padding
                 loss = loss.mean()
                 loss.backward()
@@ -142,9 +142,9 @@ def train_pass1():
                     print('Epoch {} step {} loss: {}'.format(epoch, step, loss.item()))
 
                 if step % 500 == 0:
-                    samples = gru.sample(200)
+                    samples = lstm.sample(200)
                     check_samples(samples, voc)
-                    if step != 0:
+                    if step > 0:
                         dec_learning_rate(step, opt)
 
             opt.step(clos)
