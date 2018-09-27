@@ -27,7 +27,7 @@ rdBase.DisableLog('rdApp.error')
 #     print('Step {}: learning rate decreased from {} to {}'.format(step, prev_lrs, curr_lrs))
 
 
-def dec_learning_rate2(step, opt, curr_rate):
+def dec_learning_rate2(step, opt, curr_rate, min_lr):
     """Multiplies the learning rate of the optimizer by 1 - decrease_by"""
     prev_lrs = [ ]
     curr_lrs = [ ]
@@ -39,11 +39,15 @@ def dec_learning_rate2(step, opt, curr_rate):
             #print('Learning rate unchanged!')
             param_group['lr'] *= 0.98
         elif curr_rate < 80:
-            param_group['lr'] *= 0.95
+            param_group['lr'] *= 0.96
         elif curr_rate < 90:
-            param_group['lr'] *= 0.92
+            param_group['lr'] *= 0.94
         else:
-            param_group['lr'] *= 0.9
+            param_group['lr'] *= 0.92
+
+        lr = param_group['lr']
+        if lr < min_lr:
+            param_group['lr'] = min_lr
         curr_lrs.append(param_group['lr'])
     print('Step {}: learning rate decreased from {} to {}'.format(step, prev_lrs, curr_lrs))
 
@@ -113,7 +117,6 @@ def train_pass1():
 
     rnn = RnnSeqNet(
         vocab=voc,
-        cell_type='GRU',
         input_size=128,
         hidden_size=512
     )
@@ -131,7 +134,7 @@ def train_pass1():
     criterion = nn.CrossEntropyLoss(reduction='none')
     params = rnn.parameters()
     print(params)
-    opt = optim.Adam(rnn.parameters(), lr=1e-3)
+    opt = optim.Adam(rnn.parameters(), lr=1.8e-3)
 
     rates = []
 
@@ -161,7 +164,7 @@ def train_pass1():
                 out = out.permute(0,2,1)
                 loss = criterion(out, batch_target)
 
-                loss = loss.sum(0)
+                # loss = loss.sum(0)
                 loss = loss.masked_select(batch_mask)
                 # todo: mask out padding
                 loss = loss.mean()
@@ -178,8 +181,8 @@ def train_pass1():
                     rate_avg = sum(rateX10) / len(rateX10)
                     rates_ep.append(rate_avg)
                     print_rates(rates)
-                    if step > 0:
-                        dec_learning_rate2(step, opt, rate_avg)
+                    #if step > 0:
+                    dec_learning_rate2(step, opt, rate_avg, 1e-5)
 
             opt.step(clos)
 

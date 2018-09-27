@@ -124,7 +124,7 @@ class RnnSeqNet(nn.Module):
             res.append(x.view(-1, 1))
 
             x = Variable(x.data)
-            END_samples = (x == self.vocab.start_encoded()).data
+            END_samples = (x == self.vocab.end_encoded()).data
             if torch.cuda.is_available():
                 END_samples = END_samples.cuda()
             finished = torch.ge(finished + END_samples, 1)
