@@ -18,7 +18,7 @@ def batch_lens(batch, end_token):
         found = False
         for i, c in enumerate(seq):
             if c == end_token:
-                X_len.append(i + 1 - 1)  # -1: batch is complete, but input is batch[:-1]
+                X_len.append(i + 1)  # -1: batch is complete, but input is batch[:-1]
                 found = True
                 break
         if not found:
@@ -40,12 +40,14 @@ def prepare_pack_padding(input_data, end_token, is_propagation=False):
     zipped.sort(key=lambda tp: -tp[0])
     mask = torch.ones(sz[0]-1, sz[1])  # target sequence length = input length -1
 
+    sorted_input_data = torch.zeros(input_data.size()).long().to(HOST_DEVICE)
     for i, tp in enumerate(zipped):
         input_lens[i] = tp[0]
         if input_lens[i] < mask.size()[0]-1:
             mask[input_lens[i]:, i] = 0
-        input_data[:, i] = tp[1]
-    return input_data, input_lens, mask.byte()
+        sorted_input_data[:, i] = tp[1]
+        # input_data[:, i] = tp[1]
+    return sorted_input_data, input_lens, mask.byte()
 
 
 def sort_by_len(input_data, loss, end_token, is_propagation=False):
@@ -72,7 +74,9 @@ def sort_by_len(input_data, loss, end_token, is_propagation=False):
 
 class RnnSeqNet(nn.Module):
     def __init__(self,
-                 dictionary, rev_dictionary, input_size, hidden_size, criterion,
+                 dictionary, rev_dictionary, input_size, hidden_size, out_sz,
+                 learning_rate,
+                 criterion,
                  cell_type='LSTM',
                  layer_num=3):
         super(RnnSeqNet, self).__init__()
@@ -80,6 +84,7 @@ class RnnSeqNet(nn.Module):
         self.dictionary = dictionary
         self.rev_dictionary = rev_dictionary
         self.criterion = criterion
+        self.out_sz = out_sz
 
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -90,7 +95,8 @@ class RnnSeqNet(nn.Module):
         else:
             self.is_lstm = False
 
-        vocab_size = len(dictionary)
+        vocab_size = len(dictionary)+1
+        self.end_token = 0
         self._embedding = nn.Embedding(vocab_size, input_size)
 
         if self.is_lstm:
@@ -106,7 +112,8 @@ class RnnSeqNet(nn.Module):
                 num_layers=layer_num
             )
 
-        self._linear = nn.Linear(hidden_size, vocab_size)
+        self._linear = nn.Linear(hidden_size, out_sz)
+        self._softmax = nn.LogSoftmax(dim=2)
 
         # if torch.cuda.is_available():
         self.to(HOST_DEVICE)
@@ -116,7 +123,7 @@ class RnnSeqNet(nn.Module):
             self.gru.to(HOST_DEVICE)
         self._linear.to(HOST_DEVICE)
 
-        self._optimizer = optim.Adam(self.parameters(), lr=1.5e-3)
+        self._optimizer = optim.Adam(self.parameters(), lr=learning_rate)
 
     def get_optimizer(self):
         """
@@ -142,17 +149,22 @@ class RnnSeqNet(nn.Module):
             out_data, _ = pad_packed_sequence(out_data, batch_first=False)
 
         output = self._linear(out_data)
-        return output, pt1
+        output = self._softmax(output)
+        out_sz = output.size()
+        last_out = Variable(torch.zeros(out_sz[1], out_sz[2]))
+        for i, lens in enumerate(input_lens):
+            last_out[i,:] = output[lens-2,i]
+        return last_out, pt1
 
-    def _step_pred(self, input, pt):
-        input_emb = self._embedding(input)
-
-        if self.is_lstm:
-            output, pt1 = self.lstm(input_emb, pt)
-        else:
-            output, pt1 = self.gru(input_emb, pt)
-        output = self._linear(output)
-        return output, pt1
+    # def _step_pred(self, input, pt):
+    #     input_emb = self._embedding(input)
+    #
+    #     if self.is_lstm:
+    #         output, pt1 = self.lstm(input_emb, pt)
+    #     else:
+    #         output, pt1 = self.gru(input_emb, pt)
+    #     output = self._linear(output)
+    #     return output, pt1
 
     def _init_hidden(self, batch_size):
 
@@ -179,7 +191,7 @@ class RnnSeqNet(nn.Module):
         input_data = input_data.transpose(0, 1)
         input_lens = batch_lens(
             batch=input_data,
-            end_token=self.encoder.get_end_tag_index()
+            end_token=self.end_token
         )
         dim0_size = input_data.size(0)
         batch_input = input_data.narrow(0, 0, dim0_size - 1).to(HOST_DEVICE)
@@ -211,28 +223,30 @@ class RnnSeqNet(nn.Module):
         pack_padding = not is_propagation
         output, _ = self._step(inputs, input_lens, _p, pack_padding=pack_padding)
 
-        out = output.permute(0, 2, 1)
-        loss = self.criterion(out, batch_target)
-        if not is_propagation:
-            loss = loss.masked_select(batch_mask)
-        else:
-            loss = loss*batch_mask.float()
-            loss = -loss.sum(0)
-        # todo: mask out padding
-        # loss = loss.mean()
-        return loss
+        out = output  # output.permute(0, 2, 1)
+        loss = self.criterion(out, batch_target.view(-1))
+        # if not is_propagation:
+        #     loss = loss.masked_select(batch_mask)
+        # else:
+        #     loss = loss*batch_mask.float()
+        #     loss = -loss.sum(0)
 
-    def forward(self, batch, end_token, is_propagation=False):
+        return out, loss
+
+    def forward(self, batch, is_propagation=False):
         # initialize hidden
-        batch, input_lens, batch_mask = prepare_pack_padding(
-            input_data=batch,
-            end_token=end_token,
+
+        input_data = batch[0]
+        target_cat = batch[1]
+        input_data, input_lens, batch_mask = prepare_pack_padding(
+            input_data=input_data,
+            end_token=self.end_token,
             is_propagation=is_propagation
         )
-        dim0_size = batch.size(0)
+        dim0_size = input_data.size(0)
         batch_mask = batch_mask.byte().to(HOST_DEVICE)
-        batch_input = batch.narrow(0, 0, dim0_size - 1).to(HOST_DEVICE)
-        batch_target = batch.narrow(0, 1, dim0_size - 1).to(HOST_DEVICE)
+        batch_input = input_data  # batch.narrow(0, 0, dim0_size - 1).to(HOST_DEVICE)
+        batch_target = target_cat # batch.narrow(0, 1, dim0_size - 1).to(HOST_DEVICE)
 
         return self._forward(
             batch_input=batch_input,

@@ -40,7 +40,7 @@ class RawDataSet(Dataset):
     def __getitem__(self, index):
         return self._data[index]
 
-    end_token = -1
+    end_token = 0
 
     @staticmethod
     def normalize_batch_seq(batch):
@@ -61,12 +61,60 @@ def load_dict(file):
     # idx = 0
     with open(file, 'r', encoding=ENCODING) as f:
         lines = f.read().splitlines()
-        dict = {w: i for i, w in enumerate(lines)}
+        dict = {w: i+1 for i, w in enumerate(lines)}
         rev_dict = {dict[w]: w for w in lines}
         print(len(dict))
         print(len(rev_dict))
         return dict, rev_dict
 
+
+test_sents = [
+    ("pflege und universitätsspital zürich", 4),
+    ("observatory cape town", 4),
+    ("and dentistry of new jersey new brunswick new jersey [[d5]]", 3),
+    ("professor with the university of british columbia vancouver british columbia", 1),
+    ("university of turku", 4),
+    ("independent contractor williamsville ny", 3),
+    ("spain and novo nordisk [[dk-d4]] bagsvaerd", 4),
+    ("westmead hospital westmead nsw", 0),
+    ("dentistry and pharmaceutical sciences okayama university", 4),
+    ("rosedale mansions boulevard hull [[aad]] [[daa]]", 2),
+    ("montana cancer consortium billings mt", 3),
+    ("charing cross hospital london", 2),
+    ("institut pasteur de la guyane cayenne cedex guyane", 4),
+    ("virginia commonwealth university school of nursing richmond virginia", 3),
+    ("102nd hospital of chinese pla", 4),
+    ("gene experiment center institute of applied biochemistry university of tsukuba tsukuba-city", 4),
+    ("education centre freeman hospital newcastle upon tyne", 2),
+    ("best practice advocacy centre new zealand dunedin", 4),
+    ("gastroenterology and hepatology medical university of vienna vienna", 4),
+    ("department of psychology princeton university", 3),
+]
+
+
+def run_test_samples(rnn, vocab_dict):
+    correct_count = 0
+    for line, cat in test_sents:
+        words = line.split()
+        enc = [vocab_dict[w] for w in words]
+        enc.append(RawDataSet.end_token)
+        in_data = (
+            torch.tensor([enc]).transpose(0, 1),
+            torch.tensor([cat])
+        )
+        out, _ = rnn(in_data, RawDataSet.end_token)
+        _, out_cat = out.data.topk(1)
+        if out_cat == cat:
+            correct_count += 1
+        else:
+            print(
+                '\tError: A/E(%d/%d): %s' %
+                (out_cat, cat, line)
+            )
+    print(
+        '=============== summary %d/%d = %.2f%%' %
+        (correct_count, len(test_sents), correct_count*100.0/len(test_sents))
+    )
 
 def train_pass1(batch_size, voc_file, data_file, state_file, sample_size):
 
@@ -80,8 +128,11 @@ def train_pass1(batch_size, voc_file, data_file, state_file, sample_size):
         dictionary=dict,
         rev_dictionary=rev_dict,
         input_size=128,
-        hidden_size=1024,
-        criterion=nn.CrossEntropyLoss(reduction='none')
+        hidden_size=256,
+        layer_num=3,
+        out_sz=5,
+        learning_rate=1e-3,
+        criterion=nn.NLLLoss()
     )
 
     raw_data = RawDataSet(ROOT_PATH + 'train', dict)
@@ -109,9 +160,8 @@ def train_pass1(batch_size, voc_file, data_file, state_file, sample_size):
 
             def clos():
                 rnn.get_optimizer().zero_grad()
-                loss = rnn(
-                    batch=batch,
-                    end_token=RawDataSet.end_token
+                _, loss = rnn(
+                    batch=batch
                 )
 
                 # out = out.permute(0,2,1)
@@ -124,15 +174,16 @@ def train_pass1(batch_size, voc_file, data_file, state_file, sample_size):
                     print('Epoch {} step {} loss: {}'.format(epoch, step, loss.item()))
 
                 if step > 0 and step % 500 == 0:
-                    rate_avg, sample_loss = generate_check_samples(
-                        rnn=rnn,
-                        sample_count=100,
-                        encoder=encoder
-                    )
-                    rates_ep.append(rate_avg)
-                    print_rates(rates)
-                    rnn.save_state(state_file)
-                    dec_learning_rate2(step, rnn.get_optimizer(), rate_avg, 1e-6)
+                    run_test_samples(rnn, dict)
+                #     rate_avg, sample_loss = generate_check_samples(
+                #         rnn=rnn,
+                #         sample_count=100,
+                #         encoder=encoder
+                #     )
+                #     rates_ep.append(rate_avg)
+                #     print_rates(rates)
+                #     rnn.save_state(state_file)
+                #     dec_learning_rate2(step, rnn.get_optimizer(), rate_avg, 1e-6)
 
             rnn.get_optimizer().step(clos)
 
@@ -142,7 +193,7 @@ def verify_model(model_path, hidden_size, voc_file, sample_count, iterations):
     criterion = nn.CrossEntropyLoss(reduction='none')
     rnn = RnnSeqNet(          # cell_type='GRU',
         encoder=encoder,
-        input_size=128,
+        input_size=64,
         hidden_size=hidden_size,
         criterion=criterion
     )
@@ -171,7 +222,7 @@ if __name__ == '__main__':
     # )
 
     train_pass1(
-        batch_size=128,
+        batch_size=256,
         voc_file='data/Voc',
         data_file='data/mols_filtered.smi',
         state_file='data/rnn_seq_state.ckpt',
